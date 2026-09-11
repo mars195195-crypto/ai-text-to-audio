@@ -1,4 +1,4 @@
-name: Build Android APK V0.9
+name: Build Android APK V0.12
 
 on:
   workflow_dispatch:
@@ -28,42 +28,42 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Find V0.9 ZIP
+      - name: Find V0.12 ZIP
         id: findzip
         shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.9*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.12*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: 找不到 V0.9 ZIP"
+            echo "ERROR: 找不到 V0.12 ZIP"
             echo "目前根目錄檔案："
             find . -maxdepth 1 -type f -print
             exit 1
           fi
 
-          echo "找到 V0.9 ZIP：$ZIP_FILE"
+          echo "找到 V0.12 ZIP：$ZIP_FILE"
           echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Extract V0.9 project
+      - name: Extract V0.12 project
         shell: bash
         run: |
-          rm -rf v09-project
-          mkdir -p v09-project
+          rm -rf v012-project
+          mkdir -p v012-project
 
-          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v09-project
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v012-project
 
-          echo "===== 解壓縮完成 ====="
-          find v09-project -maxdepth 5 -type f | sort
+          echo "===== V0.12 專案內容 ====="
+          find v012-project -maxdepth 5 -type f | sort
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v09-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS_FILE=$(find v012-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: 找不到 Android settings.gradle/settings.gradle.kts"
-            find v09-project -maxdepth 5 -type f | sort
+            echo "ERROR: 找不到 settings.gradle 或 settings.gradle.kts"
+            find v012-project -maxdepth 6 -type f | sort
             exit 1
           fi
 
@@ -72,10 +72,28 @@ jobs:
           echo "Android 專案位置：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+
+      - name: Show project configuration
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          echo "===== Project files ====="
+          find . -maxdepth 3 -type f | sort
+
+          echo "===== Java ====="
+          java -version
+
+          echo "===== Gradle ====="
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --version
+          else
+            gradle --version
+          fi
 
       - name: Build Debug APK
         working-directory: ${{ steps.project.outputs.dir }}
@@ -92,23 +110,25 @@ jobs:
         id: apk
         shell: bash
         run: |
-          APK_FILE=$(find v09-project -type f -name "*.apk" -path "*/build/outputs/apk/debug/*" | head -n 1)
+          APK_FILE=$(find v012-project -type f -name "*.apk" -path "*/build/outputs/apk/debug/*" | head -n 1)
 
           if [ -z "$APK_FILE" ]; then
             echo "ERROR: 編譯完成但找不到 APK"
-            find v09-project -type f -name "*.apk" -print
+            find v012-project -type f -name "*.apk" -print
             exit 1
           fi
 
           echo "找到 APK：$APK_FILE"
 
           mkdir -p apk-output
-          cp "$APK_FILE" "apk-output/AI文字轉新音檔-V0.9-完整測試版.apk"
 
-      - name: Upload V0.9 APK
+          cp "$APK_FILE" \
+            "apk-output/AI文字轉新音檔-V0.12-精簡操作正式版.apk"
+
+      - name: Upload V0.12 APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI文字轉新音檔-V0.9-APK
-          path: apk-output/AI文字轉新音檔-V0.9-完整測試版.apk
+          name: AI文字轉新音檔-V0.12-APK
+          path: apk-output/AI文字轉新音檔-V0.12-精簡操作正式版.apk
           if-no-files-found: error
           retention-days: 30
