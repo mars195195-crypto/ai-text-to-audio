@@ -18,42 +18,52 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
+      - name: Find ZIP file
+        id: findzip
+        shell: bash
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: 找不到 ZIP 檔案"
+            exit 1
+          fi
+
+          echo "找到 ZIP：$ZIP_FILE"
+          echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Android project
+        shell: bash
+        run: |
+          rm -rf android-project
+          mkdir android-project
+
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d android-project
+
+          echo "===== 解壓縮完成 ====="
+          find android-project -maxdepth 3 -type f | head -100
+
+      - name: Locate Gradle project
+        id: project
+        shell: bash
+        run: |
+          GRADLE_FILE=$(find android-project -type f -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
+
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: 找不到 settings.gradle 或 settings.gradle.kts"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLE_FILE")
+
+          echo "Android 專案位置：$PROJECT_DIR"
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
 
-      - name: Unzip Android project
-        run: |
-          mkdir project
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          echo "Using ZIP: $ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d project
-          ls -la project
-
-      - name: Build Debug APK
-        working-directory: project
-        run: |
-          gradle --no-daemon assembleDebug
-
-      - name: Prepare APK
-        run: |
-          mkdir -p output
-          cp project/app/build/outputs/apk/debug/app-debug.apk \
-             output/AI文字轉新音檔-V0.4.1-免費測試版.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AI文字轉新音檔-V0.4.1-APK
-          path: output/AI文字轉新音檔-V0.4.1-免費測試版.apk
-          retention-days: 30
+      - name: Make Gradle executable
+        shell: bash
+        working-directory: ${{ steps
