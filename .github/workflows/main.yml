@@ -28,6 +28,7 @@ jobs:
         shell: bash
         run: |
           yes | sdkmanager --licenses || true
+
           sdkmanager \
             "platform-tools" \
             "platforms;android-35" \
@@ -37,11 +38,20 @@ jobs:
         id: findzip
         shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.15.1*.zip" | head -n 1)
+          echo "=========================================="
+          echo "搜尋 V0.15.1 ZIP"
+          echo "=========================================="
+
+          ZIP_FILE=$(find . \
+            -maxdepth 1 \
+            -type f \
+            -iname "*V0.15.1*.zip" \
+            | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
             echo "ERROR: 找不到 V0.15.1 ZIP"
-            echo "===== Repository root ====="
+            echo ""
+            echo "Repository 根目錄檔案："
             find . -maxdepth 1 -type f -print
             exit 1
           fi
@@ -52,22 +62,40 @@ jobs:
       - name: Extract V0.15.1 project
         shell: bash
         run: |
+          echo "=========================================="
+          echo "解壓縮 V0.15.1"
+          echo "=========================================="
+
           rm -rf v0151-project
           mkdir -p v0151-project
 
-          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v0151-project
+          unzip -q \
+            "${{ steps.findzip.outputs.zipfile }}" \
+            -d v0151-project
 
-          echo "===== Extracted files ====="
-          find v0151-project -maxdepth 6 -type f | sort
+          echo ""
+          echo "已解壓縮："
+          find v0151-project \
+            -maxdepth 6 \
+            -type f \
+            | sort
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v0151-project -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) | head -n 1)
+          echo "=========================================="
+          echo "尋找 Android 專案"
+          echo "=========================================="
+
+          SETTINGS_FILE=$(find v0151-project \
+            -type f \
+            \( \
+              -name "settings.gradle" \
+              -o \
+              -name "settings.gradle.kts" \
+            \) \
+            | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: 找不到 settings.gradle"
@@ -76,7 +104,7 @@ jobs:
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android project：$PROJECT_DIR"
+          echo "Android 專案位置：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Set up Gradle 8.9
@@ -84,43 +112,99 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Verify source nodes
+      - name: Verify Java and Gradle
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
-          set -e
-
-          echo "===== Java ====="
+          echo "=========================================="
+          echo "Java"
+          echo "=========================================="
           java -version
 
-          echo "===== Gradle ====="
+          echo ""
+          echo "=========================================="
+          echo "Gradle"
+          echo "=========================================="
           gradle --version
 
-          echo "===== settings.gradle ====="
+      - name: Verify Android project files
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "settings.gradle"
+          echo "=========================================="
           cat settings.gradle
 
-          echo "===== build.gradle ====="
+          echo ""
+          echo "=========================================="
+          echo "build.gradle"
+          echo "=========================================="
           cat build.gradle
 
-          echo "===== app/build.gradle ====="
+          echo ""
+          echo "=========================================="
+          echo "app/build.gradle"
+          echo "=========================================="
           cat app/build.gradle
 
-          echo "===== Manifest ====="
+          echo ""
+          echo "=========================================="
+          echo "AndroidManifest.xml"
+          echo "=========================================="
           cat app/src/main/AndroidManifest.xml
 
-          echo "===== MainActivity critical nodes ====="
-          grep -n "showShareFormatDialog" app/src/main/java/global/a009/aitts/MainActivity.java
-          grep -n "showDownloadFormatDialog" app/src/main/java/global/a009/aitts/MainActivity.java
-          grep -n "wavToMp3" app/src/main/java/global/a009/aitts/MainActivity.java
-          grep -n "previewPlayer.pause" app/src/main/java/global/a009/aitts/MainActivity.java
+      - name: Verify MainActivity nodes
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          echo "=========================================="
+          echo "檢查 MainActivity 重要節點"
+          echo "=========================================="
+
+          MAIN_FILE="app/src/main/java/global/a009/aitts/MainActivity.java"
+
+          if [ ! -f "$MAIN_FILE" ]; then
+            echo "ERROR: 找不到 MainActivity.java"
+            exit 1
+          fi
+
+          echo ""
+          echo "--- showShareFormatDialog ---"
+          grep -n "showShareFormatDialog" "$MAIN_FILE" || true
+
+          echo ""
+          echo "--- showDownloadFormatDialog ---"
+          grep -n "showDownloadFormatDialog" "$MAIN_FILE" || true
+
+          echo ""
+          echo "--- wavToMp3 ---"
+          grep -n "wavToMp3" "$MAIN_FILE" || true
+
+          echo ""
+          echo "--- encoder.flush ---"
+          grep -n "encoder.flush" "$MAIN_FILE" || true
+
+          echo ""
+          echo "--- encoder.close ---"
+          grep -n "encoder.close" "$MAIN_FILE" || true
+
+          echo ""
+          echo "--- previewPlayer.pause ---"
+          grep -n "previewPlayer.pause" "$MAIN_FILE" || true
 
       - name: Resolve dependencies
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
+          echo "=========================================="
+          echo "檢查 Android 相依套件"
+          echo "=========================================="
+
           gradle \
             --no-daemon \
             --stacktrace \
+            --console=plain \
             app:dependencies \
             --configuration debugRuntimeClasspath
 
@@ -128,16 +212,66 @@ jobs:
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
+          set +e
+
+          echo "=========================================="
+          echo "開始編譯 V0.15.1 APK"
+          echo "=========================================="
+
           gradle \
             --no-daemon \
             --stacktrace \
             --info \
-            assembleDebug
+            --console=plain \
+            assembleDebug \
+            2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+          BUILD_CODE=${PIPESTATUS[0]}
+
+          echo ""
+          echo "=========================================="
+          echo "       V0.15.1 BUILD ERROR SUMMARY"
+          echo "=========================================="
+
+          grep -nEi -C 6 \
+            'error:|cannot find symbol|does not exist|FAILURE:|What went wrong|Execution failed|Could not|Caused by:|A problem occurred|No matching variant|namespace|AAPT|Manifest merger failed|failed linking references|Could not resolve|Could not find' \
+            "$GITHUB_WORKSPACE/build.log" \
+            | tail -n 300 || true
+
+          echo ""
+          echo "=========================================="
+          echo "             BUILD RESULT"
+          echo "=========================================="
+          echo "Gradle exit code: $BUILD_CODE"
+
+          if [ "$BUILD_CODE" -eq 0 ]; then
+            echo "✅ APK 編譯成功"
+          else
+            echo "❌ APK 編譯失敗"
+          fi
+
+          echo "=========================================="
+
+          exit $BUILD_CODE
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: V0.15.1-build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Find generated APK
         id: apk
+        if: success()
         shell: bash
         run: |
+          echo "=========================================="
+          echo "搜尋產生的 APK"
+          echo "=========================================="
+
           APK_FILE=$(find v0151-project \
             -type f \
             -name "*.apk" \
@@ -145,10 +279,17 @@ jobs:
             | head -n 1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: 編譯結束但找不到 APK"
-            find v0151-project -type f -name "*.apk" -print
+            echo "ERROR: 編譯完成但找不到 APK"
+            echo ""
+            echo "目前找到的 APK："
+            find v0151-project \
+              -type f \
+              -name "*.apk" \
+              -print
             exit 1
           fi
+
+          echo "找到 APK：$APK_FILE"
 
           mkdir -p apk-output
 
@@ -159,6 +300,7 @@ jobs:
             >> "$GITHUB_OUTPUT"
 
       - name: Upload V0.15.1 APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: AI文字轉新音檔-V0.15.1-APK
