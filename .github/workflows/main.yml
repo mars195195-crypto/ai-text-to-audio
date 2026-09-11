@@ -1,4 +1,4 @@
-name: Build Android APK V0.5
+name: Build Android APK V0.9
 
 on:
   workflow_dispatch:
@@ -23,81 +23,92 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK
         run: |
           yes | sdkmanager --licenses || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Find V0.5 ZIP
+      - name: Find V0.9 ZIP
         id: findzip
         shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.5*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.9*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: 找不到 V0.5 ZIP"
+            echo "ERROR: 找不到 V0.9 ZIP"
+            echo "目前根目錄檔案："
+            find . -maxdepth 1 -type f -print
             exit 1
           fi
 
-          echo "找到：$ZIP_FILE"
+          echo "找到 V0.9 ZIP：$ZIP_FILE"
           echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Extract V0.5 project
+      - name: Extract V0.9 project
         shell: bash
         run: |
-          rm -rf v05-project
-          mkdir -p v05-project
+          rm -rf v09-project
+          mkdir -p v09-project
 
-          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v05-project
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v09-project
 
-          echo "===== V0.5 project files ====="
-          find v05-project -maxdepth 5 -type f | sort
+          echo "===== 解壓縮完成 ====="
+          find v09-project -maxdepth 5 -type f | sort
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v05-project -type f -name "settings.gradle" | head -n 1)
+          SETTINGS_FILE=$(find v09-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: 找不到 settings.gradle"
+            echo "ERROR: 找不到 Android settings.gradle/settings.gradle.kts"
+            find v09-project -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "project=$PROJECT_DIR"
+          echo "Android 專案位置：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
       - name: Build Debug APK
         working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          gradle --no-daemon --stacktrace assembleDebug
-
-      - name: Prepare APK
         shell: bash
         run: |
-          APK_FILE=$(find v05-project -type f -path "*/app/build/outputs/apk/debug/app-debug.apk" | head -n 1)
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon --stacktrace assembleDebug
+          else
+            gradle --no-daemon --stacktrace assembleDebug
+          fi
+
+      - name: Find generated APK
+        id: apk
+        shell: bash
+        run: |
+          APK_FILE=$(find v09-project -type f -name "*.apk" -path "*/build/outputs/apk/debug/*" | head -n 1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: 找不到 APK"
+            echo "ERROR: 編譯完成但找不到 APK"
+            find v09-project -type f -name "*.apk" -print
             exit 1
           fi
 
+          echo "找到 APK：$APK_FILE"
+
           mkdir -p apk-output
+          cp "$APK_FILE" "apk-output/AI文字轉新音檔-V0.9-完整測試版.apk"
 
-          cp "$APK_FILE" \
-            "apk-output/AI文字轉新音檔-V0.5-免費測試版.apk"
-
-      - name: Upload APK
+      - name: Upload V0.9 APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI文字轉新音檔-V0.5-APK
-          path: apk-output/AI文字轉新音檔-V0.5-免費測試版.apk
+          name: AI文字轉新音檔-V0.9-APK
+          path: apk-output/AI文字轉新音檔-V0.9-完整測試版.apk
           if-no-files-found: error
           retention-days: 30
