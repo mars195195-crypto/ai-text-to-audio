@@ -1,4 +1,4 @@
-name: Build Android APK V0.15
+name: Build Android APK V0.15.1
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -33,14 +33,14 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find V0.15 ZIP
+      - name: Find V0.15.1 ZIP
         id: findzip
         shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.15*.zip" | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.15.1*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: 找不到 V0.15 ZIP"
+            echo "ERROR: 找不到 V0.15.1 ZIP"
             echo "===== Repository root ====="
             find . -maxdepth 1 -type f -print
             exit 1
@@ -49,22 +49,22 @@ jobs:
           echo "找到 ZIP：$ZIP_FILE"
           echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Extract V0.15 project
+      - name: Extract V0.15.1 project
         shell: bash
         run: |
-          rm -rf v015-project
-          mkdir -p v015-project
+          rm -rf v0151-project
+          mkdir -p v0151-project
 
-          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v015-project
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v0151-project
 
           echo "===== Extracted files ====="
-          find v015-project -maxdepth 6 -type f | sort
+          find v0151-project -maxdepth 6 -type f | sort
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v015-project -type f \( \
+          SETTINGS_FILE=$(find v0151-project -type f \( \
             -name "settings.gradle" -o \
             -name "settings.gradle.kts" \
           \) | head -n 1)
@@ -138,7 +138,7 @@ jobs:
         id: apk
         shell: bash
         run: |
-          APK_FILE=$(find v015-project \
+          APK_FILE=$(find v0151-project \
             -type f \
             -name "*.apk" \
             -path "*/build/outputs/apk/debug/*" \
@@ -146,22 +146,22 @@ jobs:
 
           if [ -z "$APK_FILE" ]; then
             echo "ERROR: 編譯結束但找不到 APK"
-            find v015-project -type f -name "*.apk" -print
+            find v0151-project -type f -name "*.apk" -print
             exit 1
           fi
 
           mkdir -p apk-output
 
           cp "$APK_FILE" \
-            "apk-output/AI文字轉新音檔-V0.15-全節點更新穩定版.apk"
+            "apk-output/AI文字轉新音檔-V0.15.1-精準編譯修正版.apk"
 
-          echo "apk=apk-output/AI文字轉新音檔-V0.15-全節點更新穩定版.apk" \
+          echo "apk=apk-output/AI文字轉新音檔-V0.15.1-精準編譯修正版.apk" \
             >> "$GITHUB_OUTPUT"
 
-      - name: Upload V0.15 APK
+      - name: Upload V0.15.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI文字轉新音檔-V0.15-APK
-          path: apk-output/AI文字轉新音檔-V0.15-全節點更新穩定版.apk
+          name: AI文字轉新音檔-V0.15.1-APK
+          path: apk-output/AI文字轉新音檔-V0.15.1-精準編譯修正版.apk
           if-no-files-found: error
           retention-days: 30
