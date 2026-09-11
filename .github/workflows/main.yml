@@ -1,4 +1,4 @@
-name: Build AI文字轉新音檔 V0.17 APK
+name: Build Android APK V0.18
 
 on:
   workflow_dispatch:
@@ -8,248 +8,127 @@ on:
 
 jobs:
   build:
-    name: Build V0.17 APK
+    name: build
     runs-on: ubuntu-latest
 
     steps:
-
-      - name: 下載 GitHub 專案
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 設定 Java 17
+      - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: 設定 Android SDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: 安裝 Android SDK
+      - name: Install Android SDK 35
         shell: bash
         run: |
           yes | sdkmanager --licenses || true
-
           sdkmanager \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: 尋找 V0.17 專案 ZIP
-        id: projectzip
+      - name: Find V0.18 ZIP
+        id: findzip
         shell: bash
         run: |
-          echo "======================================"
-          echo "搜尋 V0.17 ZIP"
-          echo "======================================"
+          ZIP_FILE="./AI文字轉新音檔-V0.18-免費台灣20聲線模式.zip"
 
-          find . -maxdepth 1 -type f -iname "*.zip" -print
-
-          ZIP_FILE=""
-
-          if [ -f "AI文字轉新音檔-V0.17-完整修正版.zip" ]; then
-            ZIP_FILE="AI文字轉新音檔-V0.17-完整修正版.zip"
-          elif [ -f "AI文字轉新音檔-V0.17-台灣聲音專用版-再檢查修正版.zip" ]; then
-            ZIP_FILE="AI文字轉新音檔-V0.17-台灣聲音專用版-再檢查修正版.zip"
-          elif [ -f "AI文字轉新音檔-V0.17-台灣聲音專用版.zip" ]; then
-            ZIP_FILE="AI文字轉新音檔-V0.17-台灣聲音專用版.zip"
-          else
-            ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.17*.zip" | head -n 1)
-          fi
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "找不到任何 V0.17 ZIP"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: 找不到指定的 V0.18 ZIP"
+            echo "預期檔名：$ZIP_FILE"
+            echo ""
+            echo "目前 Repository 最外層檔案："
+            find . -maxdepth 1 -type f -print
             exit 1
           fi
 
-          echo "找到專案：$ZIP_FILE"
+          echo "找到 ZIP：$ZIP_FILE"
           echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: 解壓縮 V0.17
+      - name: Extract V0.18 project
         shell: bash
         run: |
-          rm -rf v017-project
-          mkdir -p v017-project
+          rm -rf v018-project
+          mkdir -p v018-project
 
-          unzip -q "${{ steps.projectzip.outputs.zipfile }}" -d v017-project
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v018-project
 
-          echo "======================================"
-          echo "解壓縮完成"
-          echo "======================================"
+          echo "解壓完成"
+          find v018-project -maxdepth 6 -type f | sort
 
-          find v017-project -maxdepth 8 -type f | sort
-
-      - name: 尋找 Android 專案
+      - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v017-project -type f \( \
+          SETTINGS_FILE=$(find v018-project -type f \( \
             -name "settings.gradle" \
             -o -name "settings.gradle.kts" \
           \) | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "找不到 settings.gradle"
+            echo "ERROR: 找不到 settings.gradle"
+            find v018-project -maxdepth 6 -type f -print
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android 專案位置：$PROJECT_DIR"
+          echo "Android project：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: 自動修正 AndroidManifest
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Verify project files
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
           set -e
 
-          MANIFEST="app/src/main/AndroidManifest.xml"
-
-          if [ ! -f "$MANIFEST" ]; then
-            echo "找不到 AndroidManifest.xml"
-            exit 1
-          fi
-
-          echo "======================================"
-          echo "修正前 AndroidManifest"
-          echo "======================================"
-
-          cat "$MANIFEST"
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path("app/src/main/AndroidManifest.xml")
-          text = path.read_text(encoding="utf-8")
-
-          # 加入 tools namespace
-          if 'xmlns:tools="http://schemas.android.com/tools"' not in text:
-              text = text.replace(
-                  'xmlns:android="http://schemas.android.com/apk/res/android"',
-                  'xmlns:android="http://schemas.android.com/apk/res/android"\n'
-                  '    xmlns:tools="http://schemas.android.com/tools"'
-              )
-
-          # application 已經有 tools:replace 就不重複加入
-          if 'tools:replace="android:label"' not in text:
-
-              # 優先加在 android:label 後面
-              if 'android:label="AI文字轉新音檔"' in text:
-                  text = text.replace(
-                      'android:label="AI文字轉新音檔"',
-                      'android:label="AI文字轉新音檔"\n'
-                      '        tools:replace="android:label"'
-                  )
-
-              # 如果 label 使用字串資源
-              elif 'android:label="@string/app_name"' in text:
-                  text = text.replace(
-                      'android:label="@string/app_name"',
-                      'android:label="@string/app_name"\n'
-                      '        tools:replace="android:label"'
-                  )
-
-              # 如果完全找不到 label，就放進 application
-              else:
-                  text = text.replace(
-                      '<application',
-                      '<application\n'
-                      '        android:label="AI文字轉新音檔"\n'
-                      '        tools:replace="android:label"',
-                      1
-                  )
-
-          path.write_text(text, encoding="utf-8")
-          PY
-
-          echo ""
-          echo "======================================"
-          echo "修正後 AndroidManifest"
-          echo "======================================"
-
-          cat "$MANIFEST"
-
-          echo ""
-          echo "======================================"
-          echo "確認修正"
-          echo "======================================"
-
-          grep -n 'xmlns:tools="http://schemas.android.com/tools"' "$MANIFEST"
-          grep -n 'tools:replace="android:label"' "$MANIFEST"
-
-      - name: 設定 Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-
-      - name: 顯示專案設定
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
-          echo "======================================"
-          echo "Java"
-          echo "======================================"
-
+          echo "========== JAVA =========="
           java -version
 
-          echo ""
-          echo "======================================"
-          echo "Gradle"
-          echo "======================================"
-
+          echo "========== GRADLE =========="
           gradle --version
 
-          echo ""
-          echo "======================================"
-          echo "settings.gradle"
-          echo "======================================"
-
+          echo "========== SETTINGS =========="
           cat settings.gradle
 
-          echo ""
-          echo "======================================"
-          echo "app/build.gradle"
-          echo "======================================"
-
+          echo "========== APP BUILD.GRADLE =========="
           cat app/build.gradle
 
-      - name: 檢查 V0.17 功能程式
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
+          echo "========== MAINACTIVITY CHECK =========="
+
           MAIN="app/src/main/java/global/a009/aitts/MainActivity.java"
 
           if [ ! -f "$MAIN" ]; then
-            echo "找不到 MainActivity.java"
+            echo "ERROR: 找不到 MainActivity.java"
             exit 1
           fi
 
-          echo "======================================"
-          echo "檢查台灣語音"
-          echo "======================================"
-
-          grep -n "loadVoices" "$MAIN" || true
-          grep -n "台灣" "$MAIN" | head -n 30 || true
-
-          echo ""
-          echo "======================================"
-          echo "檢查 SRT"
-          echo "======================================"
-
-          grep -n "splitSubtitleSegments" "$MAIN" || true
+          grep -n "V0.18" "$MAIN" || true
+          grep -n "男聲 01" "$MAIN" || true
+          grep -n "男聲 10" "$MAIN" || true
+          grep -n "女聲 01" "$MAIN" || true
+          grep -n "女聲 10" "$MAIN" || true
+          grep -n "cmn-tw-x-ctd" "$MAIN" || true
+          grep -n "cmn-tw-x-cte" "$MAIN" || true
+          grep -n "cmn-tw-x-ctc" "$MAIN" || true
+          grep -n "zh-tw-language" "$MAIN" || true
           grep -n "writeSrtFile" "$MAIN" || true
           grep -n "formatSrtTime" "$MAIN" || true
-
-          echo ""
-          echo "======================================"
-          echo "檢查 MP3 Encoder"
-          echo "======================================"
-
           grep -n "encoder.flush" "$MAIN" || true
           grep -n "encoder.close" "$MAIN" || true
 
-      - name: 解析 Android 套件
+      - name: Resolve dependencies
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
@@ -260,7 +139,7 @@ jobs:
             app:dependencies \
             --configuration debugRuntimeClasspath
 
-      - name: 編譯 APK
+      - name: Build Debug APK
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
@@ -277,70 +156,66 @@ jobs:
           BUILD_CODE=${PIPESTATUS[0]}
 
           echo ""
-          echo "======================================"
-          echo "V0.17 編譯結果"
-          echo "======================================"
+          echo "=========================================="
+          echo "          V0.18 BUILD RESULT"
+          echo "=========================================="
+          echo "Gradle exit code: $BUILD_CODE"
+          echo ""
 
-          if [ "$BUILD_CODE" -eq 0 ]; then
-            echo "APK 編譯成功"
-          else
-            echo "APK 編譯失敗"
+          if [ "$BUILD_CODE" -ne 0 ]; then
+            echo "========== ERROR SUMMARY =========="
 
-            echo ""
-            echo "======================================"
-            echo "錯誤重點"
-            echo "======================================"
-
-            grep -nEi -C 6 \
-              'error:|cannot find symbol|does not exist|FAILURE:|What went wrong|Execution failed|Could not|Caused by:|A problem occurred|No matching variant|namespace|AAPT|Manifest merger failed|failed linking references|Could not resolve|Could not find' \
+            grep -nEi -C 8 \
+              'error:|cannot find symbol|does not exist|FAILURE:|What went wrong|Execution failed|Could not|Caused by:|A problem occurred|No matching variant|namespace|AAPT|Manifest merger failed|failed linking references|Could not resolve|Could not find|Compilation failed' \
               "$GITHUB_WORKSPACE/build.log" \
               | tail -n 400 || true
+
+            echo ""
+            echo "❌ APK 編譯失敗"
+          else
+            echo "✅ APK 編譯成功"
           fi
 
           exit $BUILD_CODE
 
-      - name: 上傳 Build Log
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: V0.17-build-log
+          name: V0.18-build-log
           path: build.log
           if-no-files-found: warn
           retention-days: 7
 
-      - name: 尋找 APK
+      - name: Find generated APK
         id: apk
         if: success()
         shell: bash
         run: |
-          APK_FILE=$(find v017-project \
+          APK_FILE=$(find v018-project \
             -type f \
             -name "*.apk" \
             -path "*/build/outputs/apk/debug/*" \
             | head -n 1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "編譯成功，但找不到 APK"
-            find v017-project -type f -name "*.apk" -print
+            echo "ERROR: 編譯完成但找不到 APK"
+            find v018-project -type f -name "*.apk" -print
             exit 1
           fi
+
+          echo "找到 APK：$APK_FILE"
 
           mkdir -p apk-output
 
           cp "$APK_FILE" \
-            "apk-output/AI文字轉新音檔-V0.17.apk"
+            "apk-output/AI文字轉新音檔-V0.18-免費台灣20聲線模式.apk"
 
-          echo "======================================"
-          echo "APK 已產生"
-          echo "======================================"
-
-          ls -lh apk-output/
-
-      - name: 上傳 V0.17 APK
+      - name: Upload V0.18 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: AI文字轉新音檔-V0.17-APK
-          path: apk-output/AI文字轉新音檔-V0.17.apk
+          name: AI文字轉新音檔-V0.18-免費台灣20聲線模式-APK
+          path: apk-output/AI文字轉新音檔-V0.18-免費台灣20聲線模式.apk
           if-no-files-found: error
           retention-days: 30
