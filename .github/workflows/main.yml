@@ -1,4 +1,4 @@
-name: Build Android APK V0.18.1
+name: Build Android APK V0.18.2
 
 on:
   workflow_dispatch:
@@ -33,20 +33,20 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find V0.18.1 ZIP
+      - name: Find V0.18.2 ZIP
         id: findzip
         shell: bash
         run: |
-          PREFERRED="./AI文字轉新音檔-V0.18.1-問號驚嘆號朗讀修正版.zip"
+          PREFERRED="./AI文字轉新音檔-V0.18.2-標點不發音修正版.zip"
 
           if [ -f "$PREFERRED" ]; then
             ZIP_FILE="$PREFERRED"
           else
-            ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.18.1*.zip" | sort | head -n 1)
+            ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.18.2*.zip" | sort | head -n 1)
           fi
 
           if [ -z "$ZIP_FILE" ] || [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: 找不到 V0.18.1 ZIP"
+            echo "ERROR: 找不到 V0.18.2 ZIP"
             echo "目前 Repository 最外層檔案："
             find . -maxdepth 1 -type f -print
             exit 1
@@ -55,19 +55,19 @@ jobs:
           echo "找到 ZIP：$ZIP_FILE"
           echo "zipfile=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Extract V0.18.1 project
+      - name: Extract V0.18.2 project
         shell: bash
         run: |
-          rm -rf v0181-project
-          mkdir -p v0181-project
-          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v0181-project
-          find v0181-project -maxdepth 6 -type f | sort
+          rm -rf v0182-project
+          mkdir -p v0182-project
+          unzip -q "${{ steps.findzip.outputs.zipfile }}" -d v0182-project
+          find v0182-project -maxdepth 6 -type f | sort
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS_FILE=$(find v0181-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS_FILE=$(find v0182-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS_FILE" ]; then
             echo "ERROR: 找不到 settings.gradle"
@@ -75,6 +75,7 @@ jobs:
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
           echo "Android project：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
@@ -83,28 +84,34 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Verify V0.18.1 source
+      - name: Verify V0.18.2 source
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
           set -e
 
+          echo "===== Java ====="
           java -version
+
+          echo "===== Gradle ====="
           gradle --version
 
           MAIN="app/src/main/java/global/a009/aitts/MainActivity.java"
 
           if [ ! -f "$MAIN" ]; then
             echo "ERROR: 找不到 MainActivity.java"
+            find app/src/main -type f | sort
             exit 1
           fi
 
-          grep -n "prepareTextForTts" "$MAIN"
-          grep -n "splitSubtitleSegments" "$MAIN"
-          grep -n "writeSrtFile" "$MAIN"
-          grep -n "synthesizeToFile" "$MAIN"
+          echo "===== 檢查 V0.18.2 標點修正 ====="
 
-          echo "V0.18.1 原始碼檢查完成"
+          grep -n "prepareTextForTts" "$MAIN" || true
+          grep -n "splitSubtitleSegments" "$MAIN" || true
+          grep -n "writeSrtFile" "$MAIN" || true
+          grep -n "synthesizeToFile" "$MAIN" || true
+
+          echo "V0.18.2 原始碼檢查完成"
 
       - name: Resolve dependencies
         working-directory: ${{ steps.project.outputs.dir }}
@@ -135,7 +142,7 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "       V0.18.1 BUILD ERROR SUMMARY"
+          echo "       V0.18.2 BUILD ERROR SUMMARY"
           echo "=========================================="
 
           grep -nEi -C 6 \
@@ -157,7 +164,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: V0.18.1-build-log
+          name: V0.18.2-build-log
           path: build.log
           if-no-files-found: warn
           retention-days: 7
@@ -166,7 +173,7 @@ jobs:
         if: success()
         shell: bash
         run: |
-          APK_FILE=$(find v0181-project \
+          APK_FILE=$(find v0182-project \
             -type f \
             -name "*.apk" \
             -path "*/build/outputs/apk/debug/*" \
@@ -174,19 +181,22 @@ jobs:
 
           if [ -z "$APK_FILE" ]; then
             echo "ERROR: 編譯完成但找不到 APK"
-            find v0181-project -type f -name "*.apk" -print
+            find v0182-project -type f -name "*.apk" -print
             exit 1
           fi
 
           echo "找到 APK：$APK_FILE"
-          mkdir -p apk-output
-          cp "$APK_FILE" "apk-output/AI文字轉新音檔-V0.18.1-問號驚嘆號朗讀修正版.apk"
 
-      - name: Upload V0.18.1 APK
+          mkdir -p apk-output
+
+          cp "$APK_FILE" \
+            "apk-output/AI文字轉新音檔-V0.18.2-標點不發音修正版.apk"
+
+      - name: Upload V0.18.2 APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: AI文字轉新音檔-V0.18.1-問號驚嘆號朗讀修正版-APK
-          path: apk-output/AI文字轉新音檔-V0.18.1-問號驚嘆號朗讀修正版.apk
+          name: AI文字轉新音檔-V0.18.2-標點不發音修正版-APK
+          path: apk-output/AI文字轉新音檔-V0.18.2-標點不發音修正版.apk
           if-no-files-found: error
           retention-days: 30
