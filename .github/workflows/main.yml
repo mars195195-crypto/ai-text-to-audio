@@ -20,14 +20,26 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Find ZIP file
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Find V0.4.2 ZIP file
         id: findzip
         shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+          echo "===== Repository files ====="
+          find . -maxdepth 2 -type f -print
+
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*V0.4.2*.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: 找不到 ZIP 檔案"
+            echo "ERROR: 找不到 V0.4.2 ZIP 檔案"
             exit 1
           fi
 
@@ -38,32 +50,101 @@ jobs:
         shell: bash
         run: |
           rm -rf android-project
-          mkdir android-project
+          mkdir -p android-project
 
           unzip -q "${{ steps.findzip.outputs.zipfile }}" -d android-project
 
-          echo "===== 解壓縮完成 ====="
-          find android-project -maxdepth 3 -type f | head -100
+          echo "===== Extracted files ====="
+          find android-project -maxdepth 5 -type f | sort | head -200
 
-      - name: Locate Gradle project
+      - name: Locate Android project
         id: project
         shell: bash
         run: |
-          GRADLE_FILE=$(find android-project -type f -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
+          SETTINGS_FILE=$(find android-project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: 找不到 settings.gradle 或 settings.gradle.kts"
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: ZIP 裡找不到 Android Gradle 專案"
+            echo "找不到 settings.gradle 或 settings.gradle.kts"
+            find android-project -maxdepth 6 -type f
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$GRADLE_FILE")
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android 專案位置：$PROJECT_DIR"
+          echo "Android project：$PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle executable
+      - name: Show Gradle configuration
+        working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
-        working-directory: ${{ steps
+        run: |
+          echo "===== Project directory ====="
+          pwd
+          ls -la
+
+          echo "===== settings.gradle ====="
+          if [ -f settings.gradle ]; then
+            cat settings.gradle
+          fi
+
+          echo "===== settings.gradle.kts ====="
+          if [ -f settings.gradle.kts ]; then
+            cat settings.gradle.kts
+          fi
+
+          echo "===== app/build.gradle ====="
+          if [ -f app/build.gradle ]; then
+            cat app/build.gradle
+          fi
+
+          echo "===== app/build.gradle.kts ====="
+          if [ -f app/build.gradle.kts ]; then
+            cat app/build.gradle.kts
+          fi
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build Debug APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          echo "===== Java ====="
+          java -version
+
+          echo "===== Gradle ====="
+          gradle --version
+
+          echo "===== Build APK ====="
+          gradle --no-daemon --stacktrace --info assembleDebug
+
+      - name: Find generated APK
+        id: findapk
+        if: success()
+        shell: bash
+        run: |
+          APK_FILE=$(find android-project -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+
+          if [ -z "$APK_FILE" ]; then
+            echo "ERROR: 編譯完成但找不到 APK"
+            find android-project -type f -name "*.apk"
+            exit 1
+          fi
+
+          echo "找到 APK：$APK_FILE"
+
+          mkdir -p apk-output
+
+          cp "$APK_FILE" "apk-output/AI文字轉新音檔-V0.4.2-免費測試版.apk"
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI文字轉新音檔-V0.4.2-APK
+          path: apk-output/AI文字轉新音檔-V0.4.2-免費測試版.apk
+          if-no-files-found: error
+          retention-days: 30
